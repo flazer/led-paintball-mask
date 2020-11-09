@@ -1,0 +1,2 @@
+void blackOut();
+void handleRequestNotFound();
