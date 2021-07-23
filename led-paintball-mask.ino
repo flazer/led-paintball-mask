@@ -20,10 +20,10 @@ Ticker ticker;
 // The LEDMatrixDriver class instance
 LEDMatrixDriver lmd(LEDMATRIX_SEGMENTS, LEDMATRIX_CS_PIN);
 
-void setup() { 
+void setup() {
   Serial.begin(115200);
   delay(300);
-  
+
   lmd.setEnabled(true);
   lmd.setIntensity(2);   // 0 = low, 10 = high
   randomSeed(analogRead(0));
@@ -39,7 +39,7 @@ void setup() {
   blackOut();
 }
 
-void loop() { 
+void loop() {
   //(re)connect wifi if not connected
   if (WiFiMulti.run() != WL_CONNECTED) {
     delay(1);
@@ -98,6 +98,10 @@ void startWebserver() {
   server.on("/angry", HTTP_GET, []() {
     String sec = server.arg("s");
     startAngry(sec.toInt());
+  });
+  server.on("/twinkle", HTTP_GET, []() {
+    String sec = server.arg("s");
+    startTwinkle(sec.toInt());
   });
   server.on("/blackout", HTTP_GET, []() {
     endAnimation();
@@ -160,6 +164,15 @@ void startAngry(int secs) {
   Serial.println("Start being angry!");
 }
 
+void startTwinkle(int secs) {
+  server.send(200, "text/plain", "I start twinkling!");
+  if(secs == 0) secs = animationSecsFallback;
+  animationPeriodSecs = secs;
+  animationActive = true;
+  eyeMode = "twinkle";
+  Serial.println("Start being twinkle!");
+}
+
 void endAnimation() {
   server.send(200, "text/plain", "Closing my eyes. :(");
   blackOut();
@@ -177,11 +190,13 @@ void blackOut() {
 void handleAnimation() {
   if(animationActive){
     if(millis() % SPEED == 0){
-      if(eyeMovement == 0) {
+      if(eyeMovement == 0){
         if(eyeMode.equals("happy")){
           triangle();
         }else if(eyeMode.equals("angry")){
           xing();
+        }else if(eyeMode.equals("twinkle")){
+          rect();
         }
         if(random(0, 200) > 195){
           eyeMovement = 1;
@@ -201,7 +216,7 @@ void handleAnimation() {
 
         if(eyeMovement == 4) eyeMovement = 0;
       }
-     
+
      if(activeCnt >= animationPeriodSecs){
         blackOut();
       }
@@ -210,10 +225,23 @@ void handleAnimation() {
 }
 
 void blink() {
-  drawSprite( (byte*)&c, 0, 0, 8, 8 );
-  drawSprite( (byte*)&d, 8, 0, 8, 8 );
-  drawSprite( (byte*)&c, 16, 0, 8, 8 );
-  drawSprite( (byte*)&d, 24, 0, 8, 8 );
+  if(eyeMode.equals("twinkle")){
+    switch(random(1)){
+      case 0:
+        drawSprite( (byte*)&c, 0, 0, 8, 8 );
+        drawSprite( (byte*)&d, 8, 0, 8, 8 );
+        break;
+      case 1:
+        drawSprite( (byte*)&c, 16, 0, 8, 8 );
+        drawSprite( (byte*)&d, 24, 0, 8, 8 );
+        break;
+    }
+  }else{
+    drawSprite( (byte*)&c, 0, 0, 8, 8 );
+    drawSprite( (byte*)&d, 8, 0, 8, 8 );
+    drawSprite( (byte*)&c, 16, 0, 8, 8 );
+    drawSprite( (byte*)&d, 24, 0, 8, 8 );
+  }
   lmd.display();
 }
 
@@ -238,6 +266,14 @@ void triangle() {
   drawSprite( (byte*)&b, 8, 0, 8, 8 );
   drawSprite( (byte*)&a, 16, 0, 8, 8 );
   drawSprite( (byte*)&b, 24, 0, 8, 8 );
+  lmd.display();
+}
+
+void rect() {
+  drawSprite( (byte*)&k, 0, 0, 8, 8 );
+  drawSprite( (byte*)&l, 8, 0, 8, 8 );
+  drawSprite( (byte*)&k, 16, 0, 8, 8 );
+  drawSprite( (byte*)&l, 24, 0, 8, 8 );
   lmd.display();
 }
 
