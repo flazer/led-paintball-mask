@@ -21,3 +21,5 @@ int activeCnt = 0;
 int animationPeriodSecs = 0;
 int animationSecsFallback = 30;
 int eyeMovement = 0;
+
+char marqueeText[100];

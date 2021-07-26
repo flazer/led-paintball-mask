@@ -102,6 +102,11 @@ void startWebserver() {
   server.on("/blackout", HTTP_GET, []() {
     endAnimation();
   });
+  server.on("/marquee", HTTP_GET, []() {
+    String text = server.arg("text");
+    String sec = server.arg("s");
+    startText(text, sec.toInt());
+  });
   server.onNotFound(handleRequestNotFound);
   Serial.println("-- Launching server ...");
   server.begin();
@@ -140,7 +145,7 @@ void loopCount() {
 }
 
 /**
-   Start flickering on request
+   Start on request
 */
 void startHappy(int secs) {
   server.send(200, "text/plain", "I am happy!");
@@ -157,12 +162,27 @@ void startAngry(int secs) {
   animationPeriodSecs = secs;
   animationActive = true;
   eyeMode = "angry";
+  blackOut();
   Serial.println("Start being angry!");
 }
 
 void endAnimation() {
   server.send(200, "text/plain", "Closing my eyes. :(");
   blackOut();
+}
+
+void startText(String text, int secs) {
+  server.send(200, "text/plain", "Starting with displaying text.");
+  if(secs == 0) secs = animationSecsFallback;
+  animationPeriodSecs = secs;
+  animationActive = true;
+  text.toCharArray(marqueeText, sizeof(marqueeText));
+  eyeMode = "text";
+  x = LEDMATRIX_WIDTH;
+  lmd.clear();
+  lmd.display();
+  Serial.println("Start displaying text.");
+  Serial.println(text);
 }
 
 void blackOut() {
@@ -177,29 +197,33 @@ void blackOut() {
 void handleAnimation() {
   if(animationActive){
     if(millis() % SPEED == 0){
-      if(eyeMovement == 0) {
-        if(eyeMode.equals("happy")){
-          triangle();
-        }else if(eyeMode.equals("angry")){
-          xing();
-        }
-        if(random(0, 200) > 195){
-          eyeMovement = 1;
-        }
+      if(eyeMode.equals("text")){
+          handleMarquee();
       }else{
-        switch (eyeMovement) {
-          case 1:
-          case 3:
-            blink();
-            break;
-          default:
-            close();
-            break;
+        if(eyeMovement == 0) {
+          if(eyeMode.equals("happy")){
+            triangle();
+          }else if(eyeMode.equals("angry")){
+            xing();
+          }
+          if(random(0, 200) > 195){
+            eyeMovement = 1;
+          }
+        }else{
+          switch (eyeMovement) {
+            case 1:
+            case 3:
+              blink();
+              break;
+            default:
+              close();
+              break;
+          }
+  
+          eyeMovement++;
+  
+          if(eyeMovement == 4) eyeMovement = 0;
         }
-
-        eyeMovement++;
-
-        if(eyeMovement == 4) eyeMovement = 0;
       }
      
      if(activeCnt >= animationPeriodSecs){
@@ -241,6 +265,14 @@ void triangle() {
   lmd.display();
 }
 
+void drawString(char* text, int len, int x, int y ) {
+  for( int idx = 0; idx < len; idx ++ ) {
+    int c = text[idx] - 32;
+    if( x + idx * 8  > LEDMATRIX_WIDTH ) return;
+    if( 8 + x + idx * 8 > 0 ) drawSprite( font[c], x + idx * 8, y, 8, 8 );
+  }
+}
+
 void drawSprite( byte* sprite, int x, int y, int width, int height ) {
   byte mask = B10000000;
   for( int iy = 0; iy < height; iy++ ){
@@ -250,6 +282,13 @@ void drawSprite( byte* sprite, int x, int y, int width, int height ) {
     }
     mask = B10000000;
   }
+}
+
+void handleMarquee() {
+  int len = strlen(marqueeText);
+  drawString(marqueeText, len, x, 0);
+  lmd.display();
+  if( --x < len * -8 ) x = LEDMATRIX_WIDTH;
 }
 
 /**
