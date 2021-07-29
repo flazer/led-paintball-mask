@@ -10,20 +10,17 @@
 #include "credentials.h"
 #include "settings.h"
 #include "prototypes.h"
+#include "OTA.h"
 #include "sprites.h"
 
+LEDMatrixDriver lmd(LEDMATRIX_SEGMENTS, LEDMATRIX_CS_PIN);
 ESP8266WiFiMulti WiFiMulti;
 ESP8266WebServer server(80);
-
 Ticker ticker;
 
-// The LEDMatrixDriver class instance
-LEDMatrixDriver lmd(LEDMATRIX_SEGMENTS, LEDMATRIX_CS_PIN);
-
-void setup() { 
+void setup() {
   Serial.begin(115200);
   delay(300);
-  
   lmd.setEnabled(true);
   lmd.setIntensity(2);   // 0 = low, 10 = high
   randomSeed(analogRead(0));
@@ -35,6 +32,7 @@ void setup() {
 
   Serial.println("");
   startWIFI();
+  handleOTASetup();
   startWebserver();
   blackOut();
 }
@@ -47,6 +45,7 @@ void loop() {
     return;
   }
 
+  ArduinoOTA.handle();
   handlePing();
   server.handleClient();
   handleAnimation();
@@ -72,7 +71,7 @@ void startWIFI() {
 
   while (WiFiMulti.run() != WL_CONNECTED) {
     loopcnt++;
-    if(loopcnt < 10) {
+    if (loopcnt < 10) {
       Serial.print(".");
     }
     delay(500);
@@ -99,13 +98,17 @@ void startWebserver() {
     String sec = server.arg("s");
     startAngry(sec.toInt());
   });
-  server.on("/blackout", HTTP_GET, []() {
-    endAnimation();
-  });
-  server.on("/marquee", HTTP_GET, []() {
+  server.on("/party", HTTP_GET, []() {
     String text = server.arg("text");
     String sec = server.arg("s");
     startText(text, sec.toInt());
+  });
+  server.on("/twinkle", HTTP_GET, []() {
+    String sec = server.arg("s");
+    startTwinkle(sec.toInt());
+  });
+  server.on("/blackout", HTTP_GET, []() {
+    endAnimation();
   });
   server.onNotFound(handleRequestNotFound);
   Serial.println("-- Launching server ...");
@@ -118,7 +121,7 @@ void startWebserver() {
    to server
 */
 void handlePing() {
-  if(pingCnt > handlePingSecs) {
+  if (pingCnt > handlePingSecs) {
     Serial.println("Start pinging.");
     bool result = Ping.ping("www.google.com");
 
@@ -139,17 +142,17 @@ void loopCount() {
   loopCnt++;
   pingCnt++;
 
-  if(animationActive) {
+  if (animationActive) {
     activeCnt++;
   }
 }
 
 /**
-   Start on request
+   Start flickering on request
 */
 void startHappy(int secs) {
   server.send(200, "text/plain", "I am happy!");
-  if(secs == 0) secs = animationSecsFallback;
+  if (secs == 0) secs = animationSecsFallback;
   animationPeriodSecs = secs;
   animationActive = true;
   eyeMode = "happy";
@@ -158,22 +161,25 @@ void startHappy(int secs) {
 
 void startAngry(int secs) {
   server.send(200, "text/plain", "I am angry!");
-  if(secs == 0) secs = animationSecsFallback;
+  if (secs == 0) secs = animationSecsFallback;
   animationPeriodSecs = secs;
   animationActive = true;
   eyeMode = "angry";
-  blackOut();
   Serial.println("Start being angry!");
 }
 
-void endAnimation() {
-  server.send(200, "text/plain", "Closing my eyes. :(");
-  blackOut();
+void startTwinkle(int secs) {
+  server.send(200, "text/plain", "I start twinkling!");
+  if (secs == 0) secs = animationSecsFallback;
+  animationPeriodSecs = secs;
+  animationActive = true;
+  eyeMode = "twinkle";
+  Serial.println("Start being twinkle!");
 }
 
 void startText(String text, int secs) {
   server.send(200, "text/plain", "Starting with displaying text.");
-  if(secs == 0) secs = animationSecsFallback;
+  if (secs == 0) secs = animationSecsFallback;
   animationPeriodSecs = secs;
   animationActive = true;
   text.toCharArray(marqueeText, sizeof(marqueeText));
@@ -185,6 +191,11 @@ void startText(String text, int secs) {
   Serial.println(text);
 }
 
+void endAnimation() {
+  server.send(200, "text/plain", "Closing my eyes. :(");
+  blackOut();
+}
+
 void blackOut() {
   animationActive = false;
   activeCnt = 0;
@@ -193,23 +204,24 @@ void blackOut() {
   Serial.println("BLACKOUT animation!");
 }
 
-
 void handleAnimation() {
-  if(animationActive){
-    if(millis() % SPEED == 0){
-      if(eyeMode.equals("text")){
-          handleMarquee();
-      }else{
-        if(eyeMovement == 0) {
-          if(eyeMode.equals("happy")){
+  if (animationActive) {
+    if (millis() % SPEED == 0){
+      if (eyeMode.equals("text")) {
+        handleMarquee();
+        } else {
+        if (eyeMovement == 0) {
+          if (eyeMode.equals("happy")) {
             triangle();
-          }else if(eyeMode.equals("angry")){
+          } else if(eyeMode.equals("angry")) {
             xing();
+          } else if(eyeMode.equals("twinkle")){
+            rect();
           }
-          if(random(0, 200) > 195){
+          if (random(0, 200) > 195) {
             eyeMovement = 1;
           }
-        }else{
+        } else {
           switch (eyeMovement) {
             case 1:
             case 3:
@@ -219,14 +231,12 @@ void handleAnimation() {
               close();
               break;
           }
-  
           eyeMovement++;
-  
-          if(eyeMovement == 4) eyeMovement = 0;
+          if (eyeMovement == 4) eyeMovement = 0;
         }
       }
      
-     if(activeCnt >= animationPeriodSecs){
+     if (activeCnt >= animationPeriodSecs) {
         blackOut();
       }
     }
@@ -234,50 +244,71 @@ void handleAnimation() {
 }
 
 void blink() {
-  drawSprite( (byte*)&c, 0, 0, 8, 8 );
-  drawSprite( (byte*)&d, 8, 0, 8, 8 );
-  drawSprite( (byte*)&c, 16, 0, 8, 8 );
-  drawSprite( (byte*)&d, 24, 0, 8, 8 );
+  if (eyeMode.equals("twinkle")) {
+    switch (random(1)){
+      case 0:
+        drawSprite((byte*)&c, 0, 0, 8, 8);
+        drawSprite((byte*)&d, 8, 0, 8, 8);
+        break;
+      case 1:
+        drawSprite((byte*)&c, 16, 0, 8, 8);
+        drawSprite((byte*)&d, 24, 0, 8, 8);
+        break;
+    }
+  } else {
+    drawSprite((byte*)&c, 0, 0, 8, 8);
+    drawSprite((byte*)&d, 8, 0, 8, 8);
+    drawSprite((byte*)&c, 16, 0, 8, 8);
+    drawSprite((byte*)&d, 24, 0, 8, 8);
+  }
   lmd.display();
 }
 
 void close() {
-  drawSprite( (byte*)&e, 0, 0, 8, 8 );
-  drawSprite( (byte*)&f, 8, 0, 8, 8 );
-  drawSprite( (byte*)&e, 16, 0, 8, 8 );
-  drawSprite( (byte*)&f, 24, 0, 8, 8 );
+  drawSprite((byte*)&e, 0, 0, 8, 8);
+  drawSprite((byte*)&f, 8, 0, 8, 8);
+  drawSprite((byte*)&e, 16, 0, 8, 8);
+  drawSprite((byte*)&f, 24, 0, 8, 8);
   lmd.display();
 }
 
 void xing() {
-  drawSprite( (byte*)&i, 0, 0, 8, 8 );
-  drawSprite( (byte*)&j, 8, 0, 8, 8 );
-  drawSprite( (byte*)&i, 16, 0, 8, 8 );
-  drawSprite( (byte*)&j, 24, 0, 8, 8 );
+  drawSprite((byte*)&i, 0, 0, 8, 8);
+  drawSprite((byte*)&j, 8, 0, 8, 8);
+  drawSprite((byte*)&i, 16, 0, 8, 8);
+  drawSprite((byte*)&j, 24, 0, 8, 8);
   lmd.display();
 }
 
 void triangle() {
-  drawSprite( (byte*)&a, 0, 0, 8, 8 );
-  drawSprite( (byte*)&b, 8, 0, 8, 8 );
-  drawSprite( (byte*)&a, 16, 0, 8, 8 );
-  drawSprite( (byte*)&b, 24, 0, 8, 8 );
+  drawSprite((byte*)&a, 0, 0, 8, 8);
+  drawSprite((byte*)&b, 8, 0, 8, 8);
+  drawSprite((byte*)&a, 16, 0, 8, 8);
+  drawSprite((byte*)&b, 24, 0, 8, 8);
   lmd.display();
 }
 
-void drawString(char* text, int len, int x, int y ) {
-  for( int idx = 0; idx < len; idx ++ ) {
+void drawString(char* text, int len, int x, int y) {
+  for (int idx = 0; idx < len; idx ++) {
     int c = text[idx] - 32;
-    if( x + idx * 8  > LEDMATRIX_WIDTH ) return;
-    if( 8 + x + idx * 8 > 0 ) drawSprite( font[c], x + idx * 8, y, 8, 8 );
+    if (x + idx * 8  > LEDMATRIX_WIDTH) return;
+    if (8 + x + idx * 8 > 0 ) drawSprite(font[c], x + idx * 8, y, 8, 8);
   }
 }
 
-void drawSprite( byte* sprite, int x, int y, int width, int height ) {
+void rect() {
+  drawSprite((byte*)&k, 0, 0, 8, 8);
+  drawSprite((byte*)&l, 8, 0, 8, 8);
+  drawSprite((byte*)&k, 16, 0, 8, 8);
+  drawSprite((byte*)&l, 24, 0, 8, 8);
+  lmd.display();
+}
+
+void drawSprite(byte* sprite, int x, int y, int width, int height) {
   byte mask = B10000000;
-  for( int iy = 0; iy < height; iy++ ){
-    for( int ix = 0; ix < width; ix++ ){
-      lmd.setPixel(x + ix, y + iy, (bool)(sprite[iy] & mask ));
+  for(int iy = 0; iy < height; iy++) {
+    for(int ix = 0; ix < width; ix++) {
+      lmd.setPixel(x + ix, y + iy, (bool)(sprite[iy] & mask));
       mask = mask >> 1;
     }
     mask = B10000000;

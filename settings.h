@@ -15,6 +15,8 @@ int handlePingSecs = 120; // 2 minutes
 int loopCnt = 0;
 int pingCnt = 0;
 
+char marqueeText[100];
+
 String eyeMode;
 bool animationActive = false;
 int activeCnt = 0;
@@ -22,4 +24,4 @@ int animationPeriodSecs = 0;
 int animationSecsFallback = 30;
 int eyeMovement = 0;
 
-char marqueeText[100];
+const char* espName = "esp8266-studio-paintballmask";

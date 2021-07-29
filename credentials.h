@@ -1,3 +1,3 @@
 //Credetials for Wifi
 String WifiCredentials[2] = {"SSID", "PWD"};
-const char* espName = "esp8266-paintballmask";
+const char* otaPassword = "YOUR-PW-4-OTA";
